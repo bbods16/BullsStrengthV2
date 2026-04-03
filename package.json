@@ -1,0 +1,13 @@
+{
+  "name": "weightroom-platform",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "api",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces"
+  }
+}

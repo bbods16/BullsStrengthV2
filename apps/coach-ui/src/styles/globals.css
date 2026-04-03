@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-[hsl(240,6%,10%)] text-white antialiased font-sans;
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply backdrop-blur-md bg-white/5 border border-white/10;
+  }
+
+  .glass-card {
+    @apply backdrop-blur-md bg-white/5 border border-white/10 rounded-xl shadow-xl transition-all duration-200;
+  }
+
+  .glass-panel {
+    @apply backdrop-blur-lg bg-black/40 border border-white/5;
+  }
+
+  .glass-input {
+    @apply backdrop-blur-sm bg-white/5 border border-white/10 rounded-lg px-4 py-2 
+           focus:border-[#8251EE] focus:bg-white/10 focus:outline-none transition-all;
+  }
+
+  .btn-brand {
+    @apply bg-[#8251EE] hover:bg-[#9366F5] text-white px-6 py-2 rounded-lg 
+           font-medium transition-all active:scale-95 shadow-[0_0_20px_rgba(130,81,238,0.3)];
+  }
+}
