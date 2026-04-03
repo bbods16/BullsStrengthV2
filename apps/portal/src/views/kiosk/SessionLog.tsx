@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { ExerciseLogger } from '../components/ExerciseLogger';
+import { ExerciseLogger } from '../../components/kiosk/ExerciseLogger';
 import { SessionLogInput, ExerciseLogInput } from '@weightroom/shared-validation';
-import { apiFetch } from '../lib/api';
+import { apiFetch } from '../../lib/api';
 import { Card, Button } from '@weightroom/ui-components';
 import { Trash2, Plus, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';

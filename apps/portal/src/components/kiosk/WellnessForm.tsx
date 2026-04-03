@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { wellnessSchema, WellnessInput } from '@weightroom/shared-validation';
-import { apiFetch } from '../lib/api';
+import { apiFetch } from '../../lib/api';
 import { Card, Button, Input } from '@weightroom/ui-components';
 import { motion } from 'framer-motion';
 

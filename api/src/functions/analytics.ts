@@ -1,29 +1,42 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
-import { getDbConnection } from "../lib/db";
+import { executeQuery } from "../lib/db";
 import { getAuthContext } from "../middleware/auth";
 
 export async function analyticsHandler(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     try {
         const { schoolId } = getAuthContext(request);
-        const pool = await getDbConnection();
+        const isSqlite = process.env.DB_TYPE === 'sqlite';
 
         const athleteId = request.query.get('athleteId');
         if (!athleteId) return { status: 400, body: "athleteId is required" };
 
         if (request.method === 'GET') {
-            // Fetch the last 30 days of load summaries for charting
-            const result = await pool.request()
-                .input('athleteId', athleteId)
-                .input('schoolId', schoolId)
-                .query(`
+            const dateLimit = new Date();
+            dateLimit.setDate(dateLimit.getDate() - 30);
+            const dateStr = dateLimit.toISOString().split('T')[0];
+
+            let query = '';
+            if (isSqlite) {
+                query = `
+                    SELECT date, dailyLoad, acuteLoad, chronicLoad, acwr
+                    FROM LoadSummary
+                    WHERE athleteId = @athleteId
+                    AND schoolId = @schoolId
+                    AND date >= @dateLimit
+                    ORDER BY date ASC
+                `;
+            } else {
+                query = `
                     SELECT date, dailyLoad, acuteLoad, chronicLoad, acwr
                     FROM LoadSummary
                     WHERE athleteId = @athleteId
                     AND schoolId = @schoolId
                     AND date > DATEADD(day, -30, SYSDATETIMEOFFSET())
                     ORDER BY date ASC
-                `);
-            
+                `;
+            }
+
+            const result = await executeQuery(query, { athleteId, schoolId, dateLimit: dateStr });
             return { jsonBody: result.recordset };
         }
 

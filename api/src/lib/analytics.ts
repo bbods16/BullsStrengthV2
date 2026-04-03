@@ -1,15 +1,24 @@
 import * as sql from 'mssql';
-import { getDbConnection } from './db';
+import { executeQuery, getDbConnection } from './db';
+import { v4 as uuidv4 } from 'uuid';
 
 export async function calculateACWR(athleteId: string, schoolId: string, date: string) {
-    const pool = await getDbConnection();
-    
-    // 1. Fetch sessions for the last 28 days
-    const result = await pool.request()
-        .input('athleteId', athleteId)
-        .input('schoolId', schoolId)
-        .input('targetDate', date)
-        .query(`
+    const isSqlite = process.env.DB_TYPE === 'sqlite';
+    const dateLimit = new Date(new Date(date).getTime() - 28 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    let query = '';
+    if (isSqlite) {
+        query = `
+            SELECT date, sessionLoad 
+            FROM Sessions 
+            WHERE athleteId = @athleteId 
+            AND schoolId = @schoolId
+            AND date <= @targetDate
+            AND date > @dateLimit
+            ORDER BY date DESC
+        `;
+    } else {
+        query = `
             SELECT date, sessionLoad 
             FROM Sessions 
             WHERE athleteId = @athleteId 
@@ -17,49 +26,68 @@ export async function calculateACWR(athleteId: string, schoolId: string, date: s
             AND date <= @targetDate
             AND date > DATEADD(day, -28, @targetDate)
             ORDER BY date DESC
-        `);
+        `;
+    }
 
+    const result = await executeQuery(query, { athleteId, schoolId, targetDate: date, dateLimit });
     const sessions = result.recordset;
     
     // 2. Calculate Acute Load (last 7 days)
+    const acuteLimit = new Date(new Date(date).getTime() - 7 * 24 * 60 * 60 * 1000);
     const acuteLoad = sessions
-        .filter(s => new Date(s.date) > new Date(new Date(date).getTime() - 7 * 24 * 60 * 60 * 1000))
+        .filter(s => new Date(s.date) > acuteLimit)
         .reduce((sum, s) => sum + (s.sessionLoad || 0), 0);
 
     // 3. Calculate Chronic Load (average of 4 weeks)
-    // Simple rolling average model
     const total28DayLoad = sessions.reduce((sum, s) => sum + (s.sessionLoad || 0), 0);
-    const chronicLoad = total28DayLoad / 4; // Average weekly load over 28 days
+    const chronicLoad = total28DayLoad / 4;
 
     // 4. Calculate ACWR
     const acwr = chronicLoad > 0 ? acuteLoad / chronicLoad : 0;
 
-    // 5. Calculate Daily Load for the target date
+    // 5. Calculate Daily Load
+    const targetDateOnly = new Date(date).toISOString().split('T')[0];
     const dailyLoad = sessions
-        .filter(s => new Date(s.date).toISOString().split('T')[0] === new Date(date).toISOString().split('T')[0])
+        .filter(s => new Date(s.date).toISOString().split('T')[0] === targetDateOnly)
         .reduce((sum, s) => sum + (s.sessionLoad || 0), 0);
 
     // 6. Save Load Summary
-    await pool.request()
-        .input('athleteId', athleteId)
-        .input('schoolId', schoolId)
-        .input('date', date)
-        .input('dailyLoad', dailyLoad)
-        .input('acuteLoad', acuteLoad)
-        .input('chronicLoad', chronicLoad)
-        .input('acwr', acwr)
-        .query(`
+    if (isSqlite) {
+        const db = await getDbConnection();
+        const existing = db.prepare('SELECT id FROM LoadSummary WHERE athleteId = ? AND date = ?').get(athleteId, targetDateOnly);
+        
+        if (existing) {
+            db.prepare(`
+                UPDATE LoadSummary SET 
+                    dailyLoad = ?, acuteLoad = ?, chronicLoad = ?, acwr = ?
+                WHERE id = ?
+            `).run(dailyLoad, acuteLoad, chronicLoad, acwr, existing.id);
+        } else {
+            db.prepare(`
+                INSERT INTO LoadSummary (id, athleteId, schoolId, date, dailyLoad, acuteLoad, chronicLoad, acwr)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(uuidv4(), athleteId, schoolId, targetDateOnly, dailyLoad, acuteLoad, chronicLoad, acwr);
+        }
+    } else {
+        await executeQuery(`
             IF EXISTS (SELECT 1 FROM LoadSummary WHERE athleteId = @athleteId AND date = @date)
                 UPDATE LoadSummary SET 
-                    dailyLoad = @dailyLoad, 
-                    acuteLoad = @acuteLoad, 
-                    chronicLoad = @chronicLoad, 
-                    acwr = @acwr
+                    dailyLoad = @dailyLoad, acuteLoad = @acuteLoad, chronicLoad = @chronicLoad, acwr = @acwr
                 WHERE athleteId = @athleteId AND date = @date
             ELSE
-                INSERT INTO LoadSummary (athleteId, schoolId, date, dailyLoad, acuteLoad, chronicLoad, acwr)
-                VALUES (@athleteId, @schoolId, @date, @dailyLoad, @acuteLoad, @chronicLoad, @acwr)
-        `);
+                INSERT INTO LoadSummary (id, athleteId, schoolId, date, dailyLoad, acuteLoad, chronicLoad, acwr)
+                VALUES (@id, @athleteId, @schoolId, @date, @dailyLoad, @acuteLoad, @chronicLoad, @acwr)
+        `, {
+            id: uuidv4(),
+            athleteId,
+            schoolId,
+            date: targetDateOnly,
+            dailyLoad,
+            acuteLoad,
+            chronicLoad,
+            acwr
+        });
+    }
 
     // 7. Trigger Alerts
     if (acwr > 1.5) {
@@ -72,15 +100,15 @@ export async function calculateACWR(athleteId: string, schoolId: string, date: s
 }
 
 async function createAlert(athleteId: string, schoolId: string, type: string, severity: string, message: string) {
-    const pool = await getDbConnection();
-    await pool.request()
-        .input('athleteId', athleteId)
-        .input('schoolId', schoolId)
-        .input('type', type)
-        .input('severity', severity)
-        .input('message', message)
-        .query(`
-            INSERT INTO Alerts (athleteId, schoolId, alertType, severity, message)
-            VALUES (@athleteId, @schoolId, @type, @severity, @message)
-        `);
+    await executeQuery(`
+        INSERT INTO Alerts (id, athleteId, schoolId, alertType, severity, message)
+        VALUES (@id, @athleteId, @schoolId, @type, @severity, @message)
+    `, {
+        id: uuidv4(),
+        athleteId,
+        schoolId,
+        type,
+        severity,
+        message
+    });
 }

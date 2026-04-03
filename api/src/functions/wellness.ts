@@ -1,53 +1,54 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
-import { getDbConnection } from "../lib/db";
+import { executeQuery } from "../lib/db";
 import { getAuthContext } from "../middleware/auth";
 import { wellnessSchema } from "@weightroom/shared-validation";
+import { v4 as uuidv4 } from 'uuid';
 
 export async function wellnessHandler(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     try {
         const { schoolId } = getAuthContext(request);
-        const pool = await getDbConnection();
 
         if (request.method === 'GET') {
             const athleteId = request.query.get('athleteId');
             let query = 'SELECT * FROM WellnessEntries WHERE schoolId = @schoolId';
-            
-            const req = pool.request().input('schoolId', schoolId);
+            const params: any = { schoolId };
             
             if (athleteId) {
                 query += ' AND athleteId = @athleteId';
-                req.input('athleteId', athleteId);
+                params.athleteId = athleteId;
             }
             
             query += ' ORDER BY date DESC';
-            const result = await req.query(query);
+            const result = await executeQuery(query, params);
             return { jsonBody: result.recordset };
         }
 
         if (request.method === 'POST') {
             const body = await request.json();
             const validated = wellnessSchema.parse(body);
+            const id = uuidv4();
             
-            await pool.request()
-                .input('schoolId', schoolId)
-                .input('athleteId', validated.athleteId)
-                .input('sleepHours', validated.sleepHours)
-                .input('sleepQuality', validated.sleepQuality)
-                .input('soreness', validated.soreness)
-                .input('fatigue', validated.fatigue)
-                .input('stress', validated.stress)
-                .input('illness', validated.illness)
-                .input('pain', validated.pain)
-                .query(`
-                    INSERT INTO WellnessEntries (
-                        schoolId, athleteId, sleepHours, sleepQuality, 
-                        soreness, fatigue, stress, illness, pain
-                    ) 
-                    VALUES (
-                        @schoolId, @athleteId, @sleepHours, @sleepQuality, 
-                        @soreness, @fatigue, @stress, @illness, @pain
-                    )
-                `);
+            await executeQuery(`
+                INSERT INTO WellnessEntries (
+                    id, schoolId, athleteId, sleepHours, sleepQuality, 
+                    soreness, fatigue, stress, illness, pain
+                ) 
+                VALUES (
+                    @id, @schoolId, @athleteId, @sleepHours, @sleepQuality, 
+                    @soreness, @fatigue, @stress, @illness, @pain
+                )
+            `, {
+                id,
+                schoolId,
+                athleteId: validated.athleteId,
+                sleepHours: validated.sleepHours,
+                sleepQuality: validated.sleepQuality,
+                soreness: validated.soreness,
+                fatigue: validated.fatigue,
+                stress: validated.stress,
+                illness: validated.illness ? 1 : 0,
+                pain: validated.pain ? 1 : 0
+            });
             
             return { status: 201, body: "Wellness entry recorded" };
         }

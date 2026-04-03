@@ -1,35 +1,38 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
-import { getDbConnection } from "../lib/db";
+import { executeQuery } from "../lib/db";
 import { getAuthContext } from "../middleware/auth";
 import { athleteSchema } from "@weightroom/shared-validation";
+import { v4 as uuidv4 } from 'uuid';
 
 export async function athletesHandler(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     try {
         const { schoolId } = getAuthContext(request);
-        const pool = await getDbConnection();
 
         if (request.method === 'GET') {
-            const result = await pool.request()
-                .input('schoolId', schoolId)
-                .query('SELECT * FROM Athletes WHERE schoolId = @schoolId ORDER BY lastName, firstName');
-            
+            const result = await executeQuery(
+                'SELECT * FROM Athletes WHERE schoolId = @schoolId ORDER BY lastName, firstName',
+                { schoolId }
+            );
             return { jsonBody: result.recordset };
         }
 
         if (request.method === 'POST') {
             const body = await request.json();
             const validated = athleteSchema.parse(body);
+            const id = uuidv4();
             
-            await pool.request()
-                .input('schoolId', schoolId)
-                .input('firstName', validated.firstName)
-                .input('lastName', validated.lastName)
-                .input('sport', validated.sport)
-                .input('team', validated.team)
-                .query(`
-                    INSERT INTO Athletes (schoolId, firstName, lastName, sport, team) 
-                    VALUES (@schoolId, @firstName, @lastName, @sport, @team)
-                `);
+            await executeQuery(
+                `INSERT INTO Athletes (id, schoolId, firstName, lastName, sport, team) 
+                 VALUES (@id, @schoolId, @firstName, @lastName, @sport, @team)`,
+                { 
+                    id, 
+                    schoolId, 
+                    firstName: validated.firstName, 
+                    lastName: validated.lastName, 
+                    sport: validated.sport, 
+                    team: validated.team 
+                }
+            );
             
             return { status: 201, body: "Athlete created successfully" };
         }

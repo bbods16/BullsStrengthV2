@@ -4,10 +4,20 @@
   "workspaces": [
     "apps/*",
     "api",
-    "packages/*"
+    "packages/*",
+    "database"
   ],
   "scripts": {
     "build": "npm run build --workspaces",
-    "test": "npm run test --workspaces"
+    "test": "npm run test --workspaces",
+    "dev:api": "npm run build --workspace api && npm start --workspace api",
+    "dev:portal": "npm run dev --workspace @weightroom/portal",
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:portal\"",
+    "start": "swa start http://localhost:5173 --api-location api",
+    "db:init": "npm run init --workspace @weightroom/database"
+  },
+  "devDependencies": {
+    "@azure/static-web-apps-cli": "^2.0.8",
+    "concurrently": "^9.2.1"
   }
 }

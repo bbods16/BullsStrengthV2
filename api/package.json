@@ -12,11 +12,14 @@
     "@azure/functions": "^4.0.0",
     "@weightroom/shared-types": "*",
     "@weightroom/shared-validation": "*",
+    "better-sqlite3": "^12.8.0",
+    "uuid": "^8.3.2",
     "zod": "^3.22.0"
   },
   "devDependencies": {
     "@azure/functions": "^4.0.0",
-    "typescript": "^5.0.0",
-    "azure-functions-core-tools": "^4.x"
+    "@types/uuid": "^10.0.0",
+    "azure-functions-core-tools": "^4.x",
+    "typescript": "^5.0.0"
   }
 }
