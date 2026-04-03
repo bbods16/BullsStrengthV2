@@ -44,3 +44,39 @@ jobs:
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_NICE_STONE_022C0AD10 }}
           action: "close"
+{
+  "navigationFallback": {
+    "rewrite": "/index.html"
+  },
+  "auth": {
+    "identityProviders": {
+      "azureActiveDirectory": {
+        "registration": {
+          "openIdIssuer": "https://login.microsoftonline.com/common/v2.0",
+          "clientIdSettingName": "AZURE_CLIENT_ID",
+          "clientSecretSettingName": "AZURE_CLIENT_SECRET"
+        }
+      }
+    }
+  },
+  "routes": [
+    {
+      "route": "/api/*",
+      "allowedRoles": ["authenticated"]
+    },
+    {
+      "route": "/login",
+      "rewrite": "/.auth/login/aad"
+    },
+    {
+      "route": "/logout",
+      "rewrite": "/.auth/logout"
+    }
+  ],
+  "responseOverrides": {
+    "401": {
+      "statusCode": 302,
+      "redirect": "/.auth/login/aad"
+    }
+  }
+}
